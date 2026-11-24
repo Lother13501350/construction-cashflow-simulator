@@ -102,6 +102,69 @@ def test_advance_recovery_capped_at_balance():
     assert list(lg.set_index("month").loc[[1, 2], "advance_recovered"]) == pytest.approx([360, 0])
 
 
+# ---------------------------------------------------------------- 契約範本區間扣回（工程採購契約範本 §5(一)1）
+def template_case():
+    """契約價金 NT$90,000,000，預付款 10% = 9,000,000，保留款 5%，累計估驗 20%～80% 區間扣回。
+
+    進度安排使第 1～4 月累計估驗 16,200,000（18%）、第 5 月估驗 9,000,000（累計 28%）；
+    第 6 月估驗 19,800,000，累計剛好 50%。
+    """
+    items = pd.DataFrame({"item_id": [1], "name": ["工程"], "category": ["x"],
+                          "cost": [81_000_000], "contract_price": [90_000_000], "cost_pay_lag": [0]})
+    plan = [.045, .045, .045, .045, .10, .22, .125, .125, .125, .125]
+    progress = pd.DataFrame({f"M{m}": [p] for m, p in enumerate(plan, start=1)},
+                            index=pd.Index([1], name="item_id"))
+    sc = Scenario("template", payment_delay=1, retention_rate=0.05, retention_release_month=12,
+                  advance_rate=0.10, advance_recovery_method="band", annual_rate=0.06)
+    return items, progress, sc
+
+
+def test_band_recovery_month5_worked_example():
+    """契約範本 §5(一)1(4) 算例：
+    扣回比例 9,000,000 ÷ (90,000,000 × 60%) = 1/6
+    第 5 月：上月底累計 16,200,000（18%，尚未進入區間），本月估驗 9,000,000，累計 25,200,000
+    扣回預付款 (25,200,000 − 18,000,000) × 1/6 = 1,200,000
+    扣保留款 9,000,000 × 5% = 450,000
+    本期實付 7,350,000（核定後 1 個月，於第 6 月月末收到）
+    """
+    items, progress, sc = template_case()
+    lg = simulate(items, progress, sc).set_index("month")
+    assert lg.loc[5, "certified_billing"] == pytest.approx(9_000_000)
+    assert lg.loc[[1, 2, 3, 4], "advance_recovered"].sum() == pytest.approx(0)
+    assert lg.loc[5, "advance_recovered"] == pytest.approx(1_200_000)
+    assert lg.loc[5, "retention_withheld"] == pytest.approx(450_000)
+    assert lg.loc[6, "receipt_progress"] == pytest.approx(7_350_000)
+
+
+def test_band_recovery_half_complete_checkpoint():
+    """完成度 50% 時，預付款 9,000,000 應已扣回一半。
+    手算：(45,000,000 − 18,000,000) × 1/6 = 4,500,000
+    """
+    items, progress, sc = template_case()
+    lg = simulate(items, progress, sc).set_index("month")
+    assert lg.loc[:6, "advance_recovered"].sum() == pytest.approx(4_500_000)
+    assert lg.loc[6, "advance_unrecovered"] == pytest.approx(4_500_000)
+
+
+def test_band_recovery_stops_at_band_end():
+    """累計估驗：第 8 月底 67,500,000（75%），第 9 月 78,750,000（87.5%）。
+    第 9 月只有 72,000,000 − 67,500,000 = 4,500,000 落在區間內 → 扣回 750,000，之後不再扣回，合計 9,000,000。
+    """
+    items, progress, sc = template_case()
+    lg = simulate(items, progress, sc).set_index("month")
+    assert lg.loc[9, "advance_recovered"] == pytest.approx(750_000)
+    assert lg.loc[10, "advance_recovered"] == pytest.approx(0)
+    assert lg["advance_recovered"].sum() == pytest.approx(9_000_000)
+    assert check_identities(items, lg.reset_index(), sc) == []
+
+
+@pytest.mark.parametrize("kwargs", [{"advance_recovery_method": "linear"},
+                                    {"recovery_band_start": 0.8, "recovery_band_end": 0.2}])
+def test_invalid_recovery_settings_rejected(kwargs):
+    with pytest.raises(ValueError):
+        Scenario("t", **kwargs)
+
+
 def test_cost_pay_lag_shifts_payment():
     """工項 2 支付延遲 1 個月：第 2 月完成的成本 2,000 改在第 3 月月初支付。"""
     items, progress = small_case(lag2=1)

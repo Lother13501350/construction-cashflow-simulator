@@ -9,15 +9,22 @@
              月內：利息 = 月初借款後的借款本金 × 年利率 / 12。
              月末：收到當月到期的工程款 → 付息（不足時新增借款，自次月計息）→ 以剩餘現金還本。
   請款      第 t 月核定的請款，於第 t + 收款延遲 月月末收款。
-            實收 = 核定請款 − 保留款（核定 × 保留比例）− 預付款扣回（核定 × 扣回比例，以未扣回餘額為上限）。
+            實收 = 核定請款 − 保留款（核定 × 保留比例）− 預付款扣回。
+  預付款扣回（兩種方式，均以未扣回餘額為上限）
+            proportional：每期扣回 核定請款 × 扣回比例。
+            band：依工程採購契約範本 §5(一)1，累計估驗達合約價 20% 起至 80% 止按比例扣回：
+                  每期扣回 = 預付款 ÷ (80% − 20%) × 合約價 × 本期累計估驗落在 20%～80% 區間內的金額。
   保留款    累計扣留的保留款於返還月月末一次返還。
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
 import pandas as pd
+
+RECOVERY_METHODS = ("proportional", "band")
 
 
 @dataclass
@@ -27,9 +34,33 @@ class Scenario:
     retention_rate: float = 0.05      # 保留款比例（按核定請款）
     retention_release_month: int = 15 # 保留款返還月份（月末）
     advance_rate: float = 0.0         # 預付款占合約價比例，開工前（t=0）支付
-    advance_recovery_rate: float = 0.10  # 每期按核定請款扣回比例
+    advance_recovery_rate: float = 0.10  # proportional：每期按核定請款扣回比例
     initial_cash: float = 0.0         # 期初現金
     annual_rate: float = 0.06         # 借款年利率
+    advance_recovery_method: str = "proportional"  # "proportional" 或 "band"
+    recovery_band_start: float = 0.20  # band：累計估驗達合約價此比例起開始扣回
+    recovery_band_end: float = 0.80    # band：累計估驗達合約價此比例時扣回完畢
+
+    def __post_init__(self):
+        if self.advance_recovery_method not in RECOVERY_METHODS:
+            raise ValueError(f"advance_recovery_method 必須是 {RECOVERY_METHODS} 之一，"
+                             f"收到 {self.advance_recovery_method!r}")
+        if not 0 <= self.recovery_band_start < self.recovery_band_end <= 1:
+            raise ValueError("扣回區間須滿足 0 ≤ recovery_band_start < recovery_band_end ≤ 1")
+
+
+def advance_recovery(sc: Scenario, advance: float, contract_total: float, certified: float,
+                     cum_before: float, unrecovered: float) -> float:
+    """單期預付款扣回金額。cum_before 為本期之前的累計核定請款。"""
+    if advance <= 0 or unrecovered <= 0:
+        return 0.0
+    if sc.advance_recovery_method == "proportional":
+        due = sc.advance_recovery_rate * certified
+    else:  # band
+        lo, hi = sc.recovery_band_start * contract_total, sc.recovery_band_end * contract_total
+        in_band = max(0.0, min(cum_before + certified, hi) - max(cum_before, lo))
+        due = advance / (hi - lo) * in_band
+    return min(due, unrecovered)
 
 
 # ---------------------------------------------------------------- 讀檔
@@ -42,7 +73,10 @@ def load_case(data_dir: str | Path):
     bad = (progress.sum(axis=1) - 1).abs() > 1e-6
     if bad.any():
         raise ValueError(f"以下項目的每月進度合計不為 1：{list(progress.index[bad])}")
-    return items, progress, [Scenario(**r) for r in scenarios.to_dict("records")]
+    # 空白欄位視為未填，改用 Scenario 的預設值
+    records = [{k: v for k, v in r.items() if not (isinstance(v, float) and math.isnan(v))}
+               for r in scenarios.to_dict("records")]
+    return items, progress, [Scenario(**r) for r in records]
 
 
 # ---------------------------------------------------------------- 工項層級：成本與請款按月分配
@@ -84,10 +118,11 @@ def simulate(items: pd.DataFrame, progress: pd.DataFrame, sc: Scenario) -> pd.Da
     # 1) 核定請款 → 保留款、預付款扣回、應收淨額（記在核定月）
     cert = {t: float(billing.get(t, 0.0)) for t in T}
     retention_withheld, recovery, net_due = {}, {}, {}
-    unrecovered = advance
+    unrecovered, cum_cert = advance, 0.0
     for t in T:
         retention_withheld[t] = sc.retention_rate * cert[t]
-        recovery[t] = min(sc.advance_recovery_rate * cert[t], unrecovered) if advance > 0 else 0.0
+        recovery[t] = advance_recovery(sc, advance, contract_total, cert[t], cum_cert, unrecovered)
+        cum_cert += cert[t]
         unrecovered -= recovery[t]
         net_due[t] = cert[t] - retention_withheld[t] - recovery[t]
 
