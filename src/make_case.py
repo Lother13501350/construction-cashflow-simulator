@@ -67,13 +67,15 @@ def main() -> None:
     items["contract_price"] = items["contract_price"].astype(int)
     assert items["cost"].sum() == 9_000_000 and items["contract_price"].sum() == CONTRACT_TOTAL
 
+    base = {"payment_delay": 2, "retention_rate": .05, "retention_release_month": 15, "advance_rate": 0,
+            "advance_recovery_rate": .10, "initial_cash": 0, "annual_rate": .06,
+            "advance_recovery_method": "proportional", "recovery_band_start": .20, "recovery_band_end": .80}
     scenarios = pd.DataFrame([
-        {"scenario": "A_延遲2月", "payment_delay": 2, "retention_rate": .05, "retention_release_month": 15,
-         "advance_rate": 0, "advance_recovery_rate": .10, "initial_cash": 0, "annual_rate": .06},
-        {"scenario": "B_延遲1月", "payment_delay": 1, "retention_rate": .05, "retention_release_month": 15,
-         "advance_rate": 0, "advance_recovery_rate": .10, "initial_cash": 0, "annual_rate": .06},
-        {"scenario": "C_延遲2月+預付10%", "payment_delay": 2, "retention_rate": .05, "retention_release_month": 15,
-         "advance_rate": .10, "advance_recovery_rate": .10, "initial_cash": 0, "annual_rate": .06},
+        {"scenario": "A_延遲2月", **base},
+        {"scenario": "B_延遲1月", **base, "payment_delay": 1},
+        {"scenario": "C_延遲2月+預付10%", **base, "advance_rate": .10},
+        # 契約範本 §5(一)1：累計估驗 20%～80% 區間按比例扣回
+        {"scenario": "D_延遲2月+預付10%範本扣回", **base, "advance_rate": .10, "advance_recovery_method": "band"},
     ])
 
     items.to_csv(DATA / "items.csv", index=False, encoding="utf-8-sig")

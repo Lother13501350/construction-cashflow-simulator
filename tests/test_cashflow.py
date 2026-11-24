@@ -210,10 +210,11 @@ def test_case_identities_hold_for_every_scenario(case):
 
 
 def test_shorter_delay_and_advance_reduce_financing(case):
-    """方向性檢查：縮短收款延遲或加入預付款，最高借款與總利息都應該下降。"""
+    """方向性檢查：第一個方案是基準（延遲 2 月、無預付款），其餘方案縮短收款延遲或加入預付款，
+    最高借款與總利息都應該低於基準。"""
     items, progress, scenarios = case
-    s = {sc.scenario: summarize(simulate(items, progress, sc), sc) for sc in scenarios}
-    a, b, c = (s[k] for k in s)
-    for other in (b, c):
-        assert other["max_loan"] < a["max_loan"]
-        assert other["total_interest"] < a["total_interest"]
+    base, *others = [summarize(simulate(items, progress, sc), sc) for sc in scenarios]
+    assert others, "範例資料至少要有兩個方案"
+    for other in others:
+        assert other["max_loan"] < base["max_loan"], other["scenario"]
+        assert other["total_interest"] < base["total_interest"], other["scenario"]

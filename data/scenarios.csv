@@ -1,4 +1,5 @@
-﻿scenario,payment_delay,retention_rate,retention_release_month,advance_rate,advance_recovery_rate,initial_cash,annual_rate
-A_延遲2月,2,0.05,15,0.0,0.1,0,0.06
-B_延遲1月,1,0.05,15,0.0,0.1,0,0.06
-C_延遲2月+預付10%,2,0.05,15,0.1,0.1,0,0.06
+﻿scenario,payment_delay,retention_rate,retention_release_month,advance_rate,advance_recovery_rate,initial_cash,annual_rate,advance_recovery_method,recovery_band_start,recovery_band_end
+A_延遲2月,2,0.05,15,0.0,0.1,0,0.06,proportional,0.2,0.8
+B_延遲1月,1,0.05,15,0.0,0.1,0,0.06,proportional,0.2,0.8
+C_延遲2月+預付10%,2,0.05,15,0.1,0.1,0,0.06,proportional,0.2,0.8
+D_延遲2月+預付10%範本扣回,2,0.05,15,0.1,0.1,0,0.06,band,0.2,0.8
