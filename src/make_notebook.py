@@ -6,7 +6,7 @@ import nbformat as nbf
 ROOT = Path(__file__).resolve().parent.parent
 nb = nbf.v4.new_notebook()
 nb.cells = [
-    nbf.v4.new_markdown_cell("# 現金流與資金缺口模擬器\n第 7 組｜Option B 第六題。依序執行全部儲存格即可重現結果。"),
+    nbf.v4.new_markdown_cell("# 現金流與資金缺口模擬器\n依序執行全部儲存格即可重現結果。"),
     nbf.v4.new_code_cell("import sys\nsys.path.insert(0, 'src')\nimport pandas as pd\n%matplotlib inline\n"
                          "from run import run\nfrom cashflow import item_monthly"),
     nbf.v4.new_markdown_cell("## 1. 輸入資料"),
