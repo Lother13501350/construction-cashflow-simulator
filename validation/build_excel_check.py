@@ -6,17 +6,18 @@
 用法： python validation/build_excel_check.py
 之後用 Excel 開啟並存檔（或執行 recalc_excel.ps1）讓公式算出數值，再執行 compare.py。
 """
+import sys
 from pathlib import Path
 
-import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter as col
 
 ROOT = Path(__file__).resolve().parent.parent
-items = pd.read_csv(ROOT / "data/items.csv", encoding="utf-8-sig")
-progress = pd.read_csv(ROOT / "data/progress.csv", encoding="utf-8-sig").set_index("item_id").loc[items["item_id"]]
-scenarios = pd.read_csv(ROOT / "data/scenarios.csv", encoding="utf-8-sig")
+sys.path.insert(0, str(ROOT / "src"))
+from cashflow import load_case  # noqa: E402  只用來讀檔，計算全部由 Excel 公式完成
+
+items, progress, scenarios = load_case(ROOT / "data")
 
 N = len(items)
 M = progress.shape[1]                      # 施工月數
@@ -52,17 +53,21 @@ COLS = ["month", "cost_paid", "certified_billing", "retention_withheld", "advanc
         "loan_in_month", "cash_after_pay", "interest", "cash_after_receipts", "borrow_interest",
         "cash_after_interest", "repayment", "loan_end", "cash_end"]
 
-for _, s in scenarios.iterrows():
+for s in scenarios:
     sh = wb.create_sheet(f"Ledger_{s.scenario}"[:31])
+    # 參數固定放在 B1:B12，下方公式以絕對位址引用
     params = [("payment_delay", s.payment_delay), ("retention_rate", s.retention_rate),
               ("retention_release_month", s.retention_release_month), ("advance_rate", s.advance_rate),
               ("advance_recovery_rate", s.advance_recovery_rate), ("initial_cash", s.initial_cash),
-              ("annual_rate", s.annual_rate), ("advance_amount", f"=B4*Items!D{r1 + 1}")]
+              ("annual_rate", s.annual_rate), ("advance_amount", "=B4*B12"),
+              ("advance_recovery_method", s.advance_recovery_method),
+              ("recovery_band_start", s.recovery_band_start), ("recovery_band_end", s.recovery_band_end),
+              ("contract_total", f"=Items!D{r1 + 1}")]
     for i, (k, v) in enumerate(params, start=1):
         sh.cell(i, 1, k).font = bold
         sh.cell(i, 2, v)
     horizon = max(int(s.retention_release_month), M + int(s.payment_delay), H_PAY)
-    HR, IR, F = 10, 11, 12                 # 表頭列、期初列、第 0 月所在列
+    HR, IR, F = 14, 15, 16                 # 表頭列、期初列、第 0 月所在列
     L = F + horizon                        # 最後一月所在列
     for j, name in enumerate(COLS, start=1):
         c = sh.cell(HR, j, name); c.font = bold; c.fill = head
@@ -76,7 +81,11 @@ for _, s in scenarios.iterrows():
             "B": f"=IF(AND(A{r}>=1,A{r}<={H_PAY}),SUM(INDEX({CP_RANGE},0,A{r})),0)",
             "C": f"=IF(AND(A{r}>=1,A{r}<={M}),SUMPRODUCT(Items!$D${r0}:$D${r1},INDEX(Items!${P0}${r0}:${P1}${r1},0,A{r})),0)",
             "D": f"=$B$2*C{r}",
-            "E": f"=IF($B$8>0,MIN($B$5*C{r},$B$8-SUM(E${IR}:E{p})),0)",
+            # 預付款扣回：proportional = 核定 × 比例；band = 預付款 ÷ 區間金額 × 本期落在區間內的累計估驗
+            "E": (f"=IF($B$8>0,MIN(IF($B$9=\"band\","
+                  f"$B$8/(($B$11-$B$10)*$B$12)*MAX(0,MIN(SUM(C${F}:C{r}),$B$11*$B$12)"
+                  f"-MAX(SUM(C${F}:C{r})-C{r},$B$10*$B$12)),"
+                  f"$B$5*C{r}),$B$8-SUM(E${IR}:E{p})),0)"),
             "F": f"=C{r}-D{r}-E{r}",
             "G": f"=IF(A{r}-$B$1>=1,INDEX($F${F}:$F${L},A{r}-$B$1+1),0)",
             "H": f"=IF(A{r}=$B$3,SUM($D${F}:$D${L}),0)",

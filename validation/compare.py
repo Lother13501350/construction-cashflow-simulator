@@ -25,9 +25,10 @@ wb = load_workbook(ROOT / "validation/excel_check.xlsx", data_only=True)
 monthly, summary = [], []
 for sc in scenarios:
     ws = wb[f"Ledger_{sc.scenario}"[:31]]
-    header = [c.value for c in ws[10]]
+    hr = next(r for r in range(1, ws.max_row + 1) if ws.cell(r, 1).value == "month")  # 表頭列
+    header = [c.value for c in ws[hr]]
     rows = []
-    r = 12
+    r = hr + 2  # 跳過「期初」列
     while isinstance(ws.cell(r, 1).value, (int, float)):
         rows.append([ws.cell(r, j + 1).value for j in range(len(header))])
         r += 1
