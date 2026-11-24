@@ -1,0 +1,4 @@
+﻿scenario,payment_delay,retention_rate,retention_release_month,advance_rate,advance_recovery_rate,initial_cash,annual_rate
+A_延遲2月,2,0.05,15,0.0,0.1,0,0.06
+B_延遲1月,1,0.05,15,0.0,0.1,0,0.06
+C_延遲2月+預付10%,2,0.05,15,0.1,0.1,0,0.06

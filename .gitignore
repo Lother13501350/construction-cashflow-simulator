@@ -1,0 +1,24 @@
+# Python 虛擬環境（每台電腦自己建立，見 README）
+.venv/
+venv/
+
+# Python 自動產生的暫存
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Jupyter 自動存檔
+.ipynb_checkpoints/
+
+# 進度報告（含組員姓名，不公開）
+memo/
+
+# Office 開檔時的暫存檔
+~$*
+
+# 作業系統與編輯器
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/

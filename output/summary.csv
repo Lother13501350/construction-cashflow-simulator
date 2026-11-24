@@ -1,0 +1,4 @@
+﻿scenario,max_funding_gap,max_gap_month,max_loan,max_loan_month,total_interest,ending_cash,ending_loan,horizon_month
+A_延遲2月,3690498.0,9,3785932.0,9,129213.0,870787.0,0.0,15
+B_延遲1月,2592998.0,8,2648321.0,8,82956.0,917044.0,0.0,15
+C_延遲2月+預付10%,3249392.0,9,3313824.0,9,93545.0,906455.0,0.0,15
